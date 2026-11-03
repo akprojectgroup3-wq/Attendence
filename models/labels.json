@@ -1,0 +1,14 @@
+{
+    "trained_at": "2026-10-29 20:15:52",
+    "total_faces": 25,
+    "num_students": 1,
+    "label_to_id": {
+        "0": "STU101"
+    },
+    "id_to_label": {
+        "STU101": 0
+    },
+    "student_sample_counts": {
+        "STU101": 26
+    }
+}

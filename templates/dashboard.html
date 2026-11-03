@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Classroom Attendance Overview</h1>
+        <p class="page-description">Live monitoring for date: <strong>{{ summary.date }}</strong> | Session: <strong>{{ settings.attendance_session }}</strong></p>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <input type="date" id="date-picker" class="form-input" value="{{ summary.date }}" style="width: auto;">
+        <button id="refresh-btn" class="btn btn-secondary btn-sm" onclick="reloadDashboardDate()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            Refresh
+        </button>
+        <a href="{{ url_for('live_attendance') }}" class="btn btn-primary btn-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8"/>
+            </svg>
+            Launch Camera
+        </a>
+    </div>
+</div>
+
+<!-- Key Performance Metrics Cards -->
+<div class="stats-grid">
+    <!-- Total Registered -->
+    <div class="stat-card">
+        <div class="stat-icon-wrapper blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value" id="stat-total">{{ summary.total_students }}</div>
+            <div class="stat-label">Total Enrolled</div>
+        </div>
+    </div>
+
+    <!-- Present Today -->
+    <div class="stat-card">
+        <div class="stat-icon-wrapper green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value" id="stat-present" style="color: var(--success);">{{ summary.present_count }}</div>
+            <div class="stat-label">Present (On Time)</div>
+        </div>
+    </div>
+
+    <!-- Late Today -->
+    <div class="stat-card">
+        <div class="stat-icon-wrapper amber">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value" id="stat-late" style="color: var(--warning);">{{ summary.late_count }}</div>
+            <div class="stat-label">Late Arrival (&ge; {{ settings.cutoff_time }})</div>
+        </div>
+    </div>
+
+    <!-- Absent Today -->
+    <div class="stat-card">
+        <div class="stat-icon-wrapper red">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value" id="stat-absent" style="color: var(--danger);">{{ summary.absent_count }}</div>
+            <div class="stat-label">Absent (Unmarked)</div>
+        </div>
+    </div>
+
+    <!-- Attendance Rate -->
+    <div class="stat-card">
+        <div class="stat-icon-wrapper purple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="19" y1="5" x2="5" y2="19"/>
+                <circle cx="6.5" cy="6.5" r="2.5"/>
+                <circle cx="17.5" cy="17.5" r="2.5"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value" id="stat-rate" style="color: #7c3aed;">{{ summary.attendance_rate }}%</div>
+            <div class="stat-label">Attendance Rate</div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="charts-grid">
+    <!-- 7-Day Trend Bar Chart -->
+    <div class="card">
+        <div class="card-title">
+            <span>Weekly Attendance Trend (Last 7 Days)</span>
+            <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">Present vs Late vs Absent</span>
+        </div>
+        <div class="chart-container">
+            <canvas id="weeklyTrendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Today's Proportion Donut Chart -->
+    <div class="card">
+        <div class="card-title">
+            <span>Today's Distribution</span>
+            <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">Cutoff: {{ settings.cutoff_time }}</span>
+        </div>
+        <div class="chart-container">
+            <canvas id="distributionDonutChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Tables Row -->
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+    <!-- Today's Live Attendance Table -->
+    <div class="card">
+        <div class="card-title">
+            <span>Today's Verified Scans ({{ summary.today_records|length }})</span>
+            <a href="{{ url_for('attendance_page') }}" class="btn btn-secondary btn-sm">Full Attendance Log &rarr;</a>
+        </div>
+
+        {% if summary.today_records %}
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Student ID</th>
+                        <th>Full Name</th>
+                        <th>Scan Time</th>
+                        <th>Status</th>
+                        <th>Session</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in summary.today_records %}
+                    <tr>
+                        <td style="font-weight: 600; font-family: monospace;">{{ r.StudentID }}</td>
+                        <td>{{ r.Name }}</td>
+                        <td>{{ r.Time }}</td>
+                        <td>
+                            {% if r.Status == 'Present' %}
+                                <span class="badge badge-present">Present</span>
+                            {% elif r.Status == 'Late' %}
+                                <span class="badge badge-late">Late</span>
+                            {% else %}
+                                <span class="badge badge-absent">{{ r.Status }}</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge" style="background:#f1f5f9; color:#475569;">{{ r.SessionID }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect width="18" height="18" x="3" y="4" rx="2"/>
+                <path d="M3 10h18"/>
+            </svg>
+            <div class="empty-state-title">No Scans Recorded for {{ summary.date }}</div>
+            <div class="empty-state-desc">Launch the live attendance camera or select a previous date with records.</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Absent Students List for Today -->
+    <div class="card">
+        <div class="card-title">
+            <span>Absent Students ({{ summary.absent_students|length }})</span>
+            <span style="font-size: 0.78rem; color: var(--danger); font-weight: 600;">Not Scanned</span>
+        </div>
+
+        {% if summary.absent_students %}
+        <div class="activity-list" style="max-height: 380px;">
+            {% for s in summary.absent_students %}
+            <div class="activity-item">
+                <div>
+                    <div style="font-weight: 600; font-size: 0.9rem;">{{ s.Name }}</div>
+                    <div style="font-size: 0.78rem; color: var(--text-muted); font-family: monospace;">{{ s.StudentID }} &bull; {{ s.ClassDepartment }}</div>
+                </div>
+                <span class="badge badge-absent">Absent</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding: 24px;">
+            <div class="empty-state-title" style="color: var(--success);">100% Attendance!</div>
+            <div class="empty-state-desc">All registered students have checked in today.</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Initialize Weekly Bar Chart
+    const weeklyData = {{ weekly_data | tojson }};
+    const ctxWeekly = document.getElementById('weeklyTrendChart').getContext('2d');
+    new Chart(ctxWeekly, {
+        type: 'bar',
+        data: {
+            labels: weeklyData.labels,
+            datasets: [
+                {
+                    label: 'Present',
+                    data: weeklyData.present,
+                    backgroundColor: '#16a34a',
+                    borderRadius: 4
+                },
+                {
+                    label: 'Late',
+                    data: weeklyData.late,
+                    backgroundColor: '#d97706',
+                    borderRadius: 4
+                },
+                {
+                    label: 'Absent',
+                    data: weeklyData.absent,
+                    backgroundColor: '#dc2626',
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true, grid: { display: false } },
+                y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+            },
+            plugins: {
+                legend: { position: 'top' }
+            }
+        }
+    });
+
+    // Initialize Donut Chart
+    const ctxDonut = document.getElementById('distributionDonutChart').getContext('2d');
+    new Chart(ctxDonut, {
+        type: 'doughnut',
+        data: {
+            labels: ['Present', 'Late', 'Absent'],
+            datasets: [{
+                data: [{{ summary.present_count }}, {{ summary.late_count }}, {{ summary.absent_count }}],
+                backgroundColor: ['#16a34a', '#d97706', '#dc2626'],
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    function reloadDashboardDate() {
+        const dateVal = document.getElementById('date-picker').value;
+        if (dateVal) {
+            window.location.href = "{{ url_for('dashboard') }}?date=" + dateVal;
+        }
+    }
+</script>
+{% endblock %}

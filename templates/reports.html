@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Reports &amp; Analytics{% endblock %}
+
+{% block content %}
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">Executive Attendance Analytics & Reports</h1>
+        <p class="page-description">Generate comprehensive attendance percentage summaries, student compliance, and printable reports.</p>
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <button class="btn btn-secondary" onclick="window.print()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect width="12" height="8" x="6" y="14"/>
+            </svg>
+            Print Clean Report
+        </button>
+        <a href="{{ url_for('export_attendance') }}?start_date={{ start_date or '' }}&end_date={{ end_date or '' }}" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export to CSV
+        </a>
+    </div>
+</div>
+
+<!-- Printable Header (Visible only when printed) -->
+<div class="print-only" style="margin-bottom: 24px; text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px;">
+    <h1 style="font-size: 1.6rem; font-weight: 700; margin-bottom: 4px;">{{ settings.institution_name }}</h1>
+    <h2 style="font-size: 1.1rem; font-weight: 600; color: #475569;">{{ settings.department }} &bull; {{ settings.semester }}</h2>
+    <p style="font-size: 0.88rem; color: #64748b; margin-top: 4px;">Official Attendance Report | Date Range: {{ start_date or 'Beginning' }} to {{ end_date or 'Present' }}</p>
+</div>
+
+<!-- Filters Card (Hidden in print) -->
+<div class="card no-print" style="padding: 18px 22px;">
+    <form method="GET" action="{{ url_for('reports_page') }}" style="display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end;">
+        <div>
+            <label class="form-label" style="font-size:0.78rem;">Start Date</label>
+            <input type="date" name="start_date" class="form-input" value="{{ start_date or '' }}">
+        </div>
+
+        <div>
+            <label class="form-label" style="font-size:0.78rem;">End Date</label>
+            <input type="date" name="end_date" class="form-input" value="{{ end_date or '' }}">
+        </div>
+
+        <div style="min-width: 180px;">
+            <label class="form-label" style="font-size:0.78rem;">Filter by Student</label>
+            <select name="student_id" class="form-select">
+                <option value="">All Registered Students</option>
+                {% for s in all_students %}
+                <option value="{{ s.StudentID }}" {% if selected_student_id == s.StudentID %}selected{% endif %}>
+                    {{ s.Name }} ({{ s.StudentID }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="height: 38px;">Generate Report</button>
+        {% if start_date or end_date or selected_student_id %}
+        <a href="{{ url_for('reports_page') }}" class="btn btn-secondary" style="height: 38px;">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Aggregate Summary Metrics -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon-wrapper blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value">{{ report_stats.total_records }}</div>
+            <div class="stat-label">Total Recorded Scans</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon-wrapper green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value" style="color:var(--success);">{{ report_stats.total_present }}</div>
+            <div class="stat-label">On-Time (Present)</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon-wrapper amber">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value" style="color:var(--warning);">{{ report_stats.total_late }}</div>
+            <div class="stat-label">Late Arrivals</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon-wrapper purple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="19" y1="5" x2="5" y2="19"/>
+                <circle cx="6.5" cy="6.5" r="2.5"/>
+                <circle cx="17.5" cy="17.5" r="2.5"/>
+            </svg>
+        </div>
+        <div>
+            <div class="stat-value" style="color:#7c3aed;">{{ report_stats.overall_attendance_pct }}%</div>
+            <div class="stat-label">Overall Compliance Rate</div>
+        </div>
+    </div>
+</div>
+
+<!-- Student-by-Student Attendance Summary Table -->
+<div class="card">
+    <div class="card-title">
+        <span>Per-Student Attendance Breakdown</span>
+        <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">Calculated from stored records</span>
+    </div>
+
+    {% if student_summaries %}
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Student ID</th>
+                    <th>Full Name</th>
+                    <th>Department</th>
+                    <th>On-Time Scans</th>
+                    <th>Late Scans</th>
+                    <th>Total Attended</th>
+                    <th>Attendance %</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in student_summaries %}
+                <tr>
+                    <td style="font-weight:700; font-family:monospace; color:var(--primary);">{{ item.student.StudentID }}</td>
+                    <td style="font-weight:600;">{{ item.student.Name }}</td>
+                    <td>{{ item.student.ClassDepartment }}</td>
+                    <td style="color:var(--success); font-weight:600;">{{ item.present }}</td>
+                    <td style="color:var(--warning); font-weight:600;">{{ item.late }}</td>
+                    <td style="font-weight:700;">{{ item.total_attended }}</td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-weight:700;">{{ item.percentage }}%</span>
+                            <div style="width:60px; height:6px; background:#f1f5f9; border-radius:3px; overflow:hidden;">
+                                <div style="width:{{ item.percentage }}%; height:100%; background:{% if item.percentage >= 75 %}#16a34a{% elif item.percentage >= 50 %}#d97706{% else %}#dc2626{% endif %};"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if item.percentage >= 75 %}
+                            <span class="badge badge-present">Compliant (&ge;75%)</span>
+                        {% elif item.percentage >= 50 %}
+                            <span class="badge badge-late">Warning (&lt;75%)</span>
+                        {% else %}
+                            <span class="badge badge-absent">Shortage (&lt;50%)</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-title">No Summary Data Available</div>
+        <div class="empty-state-desc">No attendance records found for the selected criteria.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+{% endblock %}

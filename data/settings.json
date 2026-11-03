@@ -1,0 +1,11 @@
+{
+    "institution_name": "Smart Classroom Campus",
+    "department": "Computer Science & Engineering",
+    "semester": "Semester 6 - 2026",
+    "cutoff_time": "09:30",
+    "timezone": "Asia/Kolkata",
+    "camera_source": "0",
+    "recognition_threshold": 75.0,
+    "duplicate_cooldown_seconds": 300,
+    "attendance_session": "SESSION_1"
+}

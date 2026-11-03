@@ -1,0 +1,21 @@
+# Python & virtual environment
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+.coverage
+htmlcov/
+
+# Sensitive / Generated data
+data/face_dataset/*
+!data/face_dataset/.gitkeep
+models/*.yml
+models/*.xml
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

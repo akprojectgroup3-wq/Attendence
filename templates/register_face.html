@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+
+{% block title %}Register Face Biometrics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Biometric Face Enrollment</h1>
+        <p class="page-description">Capture facial training images using your camera to train the LBPH recognition model.</p>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <!-- Left Column: Camera Viewport and Controls -->
+    <div class="card">
+        <div class="card-title">
+            <span>Camera Capture Viewport</span>
+            <span id="capture-status-badge" class="badge" style="background: #f1f5f9; color: #64748b;">Camera Idle</span>
+        </div>
+
+        <!-- Student Selector & Consent -->
+        <div class="form-group">
+            <label class="form-label" for="selected-student">Select Student to Register *</label>
+            <select id="selected-student" class="form-select">
+                <option value="">-- Choose Enrolled Student --</option>
+                {% for s in students %}
+                <option value="{{ s.StudentID }}" {% if preselected_id == s.StudentID %}selected{% endif %}>
+                    {{ s.Name }} ({{ s.StudentID }}) - {% if s.FaceRegistered == 'Yes' %}Already Registered{% else %}Not Registered{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Consent Checkbox -->
+        <div style="margin-bottom: 20px; padding: 12px 16px; background-color: var(--primary-light); border: 1px solid #bfdbfe; border-radius: var(--radius-sm);">
+            <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 0.85rem; color: #1e3a8a;">
+                <input type="checkbox" id="consent-check" style="margin-top: 3px;">
+                <span>
+                    <strong>Student Consent & Privacy Agreement:</strong> I confirm that the student has provided informed consent to capture and process their facial biometric features solely for educational attendance verification.
+                </span>
+            </label>
+        </div>
+
+        <!-- Camera Viewport Box -->
+        <div class="camera-feed-container" style="background:#0f172a; position: relative;">
+            <video id="webcam-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; display:none;"></video>
+            <canvas id="capture-canvas" style="display:none;"></canvas>
+
+            <!-- Guide Overlay -->
+            <div id="camera-guide-overlay" style="display:none; position:absolute; top:15%; left:25%; width:50%; height:70%; border:2px dashed #38bdf8; border-radius:12px; pointer-events:none; display:flex; align-items:flex-end; justify-content:center; padding-bottom:10px;">
+                <span id="guide-text" style="background:rgba(15,23,42,0.85); color:#ffffff; font-size:0.75rem; padding:4px 8px; border-radius:4px;">Position face within frame</span>
+            </div>
+
+            <div id="camera-placeholder" class="camera-placeholder">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:12px;">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                </svg>
+                <div style="font-weight:600; margin-bottom:4px;">Camera is currently off</div>
+                <div style="font-size:0.82rem;">Select a student and grant consent to start capture</div>
+            </div>
+        </div>
+
+        <!-- Camera Control Action Buttons -->
+        <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
+            <button id="start-cam-btn" class="btn btn-primary" onclick="startWebcam()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                </svg>
+                Open Camera
+            </button>
+
+            <button id="burst-capture-btn" class="btn btn-success" onclick="startBurstCapture()" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polygon points="10 8 16 12 10 16 10 8"/>
+                </svg>
+                Auto-Capture 25 Photos
+            </button>
+
+            <button id="single-capture-btn" class="btn btn-secondary" onclick="captureSinglePhoto()" disabled>
+                Capture Single
+            </button>
+
+            <button id="stop-cam-btn" class="btn btn-danger" onclick="stopWebcam()" disabled>
+                Cancel / Stop
+            </button>
+        </div>
+    </div>
+
+    <!-- Right Column: Registration Progress, Guidelines & Model Training -->
+    <div>
+        <!-- Progress Card -->
+        <div class="card">
+            <div class="card-title">
+                <span>Capture Progress</span>
+                <span id="capture-counter" style="font-weight:700; color:var(--primary);">0 / 25</span>
+            </div>
+
+            <div style="background:#f1f5f9; height:12px; border-radius:6px; overflow:hidden; margin-bottom:16px;">
+                <div id="progress-bar-fill" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s ease;"></div>
+            </div>
+
+            <div id="capture-message" style="font-size:0.86rem; color:var(--text-secondary); margin-bottom:20px;">
+                Ready to collect training data.
+            </div>
+
+            <!-- Thumbnail Grid -->
+            <div id="sample-thumbs-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; max-height:160px; overflow-y:auto; padding:6px; border:1px solid var(--border-color); border-radius:var(--radius-sm); margin-bottom:20px; min-height:80px; background:#f8fafc;">
+                <!-- Dynamically injected thumbnails -->
+            </div>
+
+            <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                <button id="train-model-btn" class="btn btn-primary" style="width:100%;" onclick="trainModel()" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/>
+                        <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/>
+                        <path d="M7 21h10"/>
+                        <path d="M12 3v18"/>
+                        <path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>
+                    </svg>
+                    Train Recognition Model (LBPH)
+                </button>
+                <div id="training-spinner" style="display:none; text-align:center; margin-top:10px; color:var(--primary); font-size:0.85rem; font-weight:600;">
+                    Training LBPH Classifier... Please wait.
+                </div>
+            </div>
+        </div>
+
+        <!-- Instructions Card -->
+        <div class="card">
+            <div class="card-title">
+                <span>Best Practices for Registration</span>
+            </div>
+            <ul style="padding-left: 20px; font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px;">
+                <li><strong>Lighting:</strong> Ensure even, front-facing room lighting. Avoid bright windows directly behind the student.</li>
+                <li><strong>Head Angles:</strong> Look directly at the camera, then turn slightly left, right, up, and down during the 25-frame capture.</li>
+                <li><strong>Expressions:</strong> Keep a neutral expression for some frames and a slight smile for others to give LBPH diverse features.</li>
+                <li><strong>Occlusion:</strong> Keep hair, hands, and hats away from eyes, nose, and mouth. Glasses are fine if normally worn.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let videoStream = null;
+let capturedCount = 0;
+const targetCount = 25;
+let isBurstRunning = false;
+
+const video = document.getElementById('webcam-video');
+const canvas = document.getElementById('capture-canvas');
+const studentSelect = document.getElementById('selected-student');
+const consentCheck = document.getElementById('consent-check');
+
+async function startWebcam() {
+    if (!studentSelect.value) {
+        showToast("Please choose a student from the dropdown first.", "warning");
+        studentSelect.focus();
+        return;
+    }
+    if (!consentCheck.checked) {
+        showToast("Please check the Student Consent & Privacy box to proceed.", "warning");
+        consentCheck.focus();
+        return;
+    }
+
+    try {
+        videoStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+            audio: false
+        });
+        video.srcObject = videoStream;
+        video.style.display = 'block';
+        document.getElementById('camera-placeholder').style.display = 'none';
+        document.getElementById('camera-guide-overlay').style.display = 'flex';
+
+        document.getElementById('start-cam-btn').disabled = true;
+        document.getElementById('burst-capture-btn').disabled = false;
+        document.getElementById('single-capture-btn').disabled = false;
+        document.getElementById('stop-cam-btn').disabled = false;
+
+        document.getElementById('capture-status-badge').textContent = 'Camera Active';
+        document.getElementById('capture-status-badge').style.background = '#dcfce7';
+        document.getElementById('capture-status-badge').style.color = '#15803d';
+
+        showToast("Webcam connected. Position your face in the guide box.", "success");
+    } catch (err) {
+        console.error(err);
+        showToast("Could not access camera: " + err.message + ". Please verify camera permissions.", "error");
+    }
+}
+
+function stopWebcam() {
+    isBurstRunning = false;
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+    }
+    video.style.display = 'none';
+    document.getElementById('camera-placeholder').style.display = 'flex';
+    document.getElementById('camera-guide-overlay').style.display = 'none';
+
+    document.getElementById('start-cam-btn').disabled = false;
+    document.getElementById('burst-capture-btn').disabled = true;
+    document.getElementById('single-capture-btn').disabled = true;
+    document.getElementById('stop-cam-btn').disabled = true;
+
+    document.getElementById('capture-status-badge').textContent = 'Camera Off';
+    document.getElementById('capture-status-badge').style.background = '#f1f5f9';
+    document.getElementById('capture-status-badge').style.color = '#64748b';
+}
+
+async function captureSinglePhoto() {
+    if (!videoStream) return;
+    const studentId = studentSelect.value;
+    if (!studentId) return;
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    try {
+        const res = await fetch("{{ url_for('api_register_face_sample') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                student_id: studentId,
+                image_data: dataUrl,
+                target_count: targetCount
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            capturedCount = data.meta.current_count;
+            updateProgress(capturedCount, data.message);
+            addThumbnail(dataUrl);
+
+            if (data.meta.is_complete) {
+                document.getElementById('train-model-btn').disabled = false;
+                showToast("All 25 samples captured! You can now train the model.", "success");
+                stopWebcam();
+            }
+            return true;
+        } else {
+            document.getElementById('capture-message').textContent = data.message;
+            return false;
+        }
+    } catch (err) {
+        console.error(err);
+        return false;
+    }
+}
+
+async function startBurstCapture() {
+    if (isBurstRunning) return;
+    isBurstRunning = true;
+    document.getElementById('burst-capture-btn').disabled = true;
+    document.getElementById('single-capture-btn').disabled = true;
+
+    const guidance = [
+        "Look directly at the center...",
+        "Turn slightly left...",
+        "Turn slightly right...",
+        "Tilt your head slightly up...",
+        "Smile slightly...",
+        "Blink and return to center..."
+    ];
+
+    while (isBurstRunning && capturedCount < targetCount) {
+        const guideIdx = Math.floor((capturedCount / targetCount) * guidance.length);
+        document.getElementById('guide-text').textContent = guidance[guideIdx] || "Hold still...";
+        
+        await captureSinglePhoto();
+        await new Promise(r => setTimeout(r, 280)); // 280ms interval between captures
+    }
+
+    isBurstRunning = false;
+    document.getElementById('burst-capture-btn').disabled = false;
+    document.getElementById('single-capture-btn').disabled = false;
+}
+
+function updateProgress(count, msg) {
+    document.getElementById('capture-counter').textContent = `${count} / ${targetCount}`;
+    const pct = Math.min(100, Math.round((count / targetCount) * 100));
+    document.getElementById('progress-bar-fill').style.width = pct + '%';
+    document.getElementById('capture-message').textContent = msg;
+
+    if (count >= targetCount) {
+        document.getElementById('train-model-btn').disabled = false;
+    }
+}
+
+function addThumbnail(dataUrl) {
+    const grid = document.getElementById('sample-thumbs-grid');
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.style.width = '100%';
+    img.style.height = '48px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '4px';
+    img.style.border = '1px solid #cbd5e1';
+    grid.prepend(img);
+}
+
+async function trainModel() {
+    const btn = document.getElementById('train-model-btn');
+    const spinner = document.getElementById('training-spinner');
+    btn.disabled = true;
+    spinner.style.display = 'block';
+
+    try {
+        const res = await fetch("{{ url_for('api_train_model') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+        });
+        const data = await res.json();
+        spinner.style.display = 'none';
+
+        if (data.success) {
+            showToast(data.message, "success");
+            setTimeout(() => {
+                window.location.href = "{{ url_for('live_attendance') }}";
+            }, 1200);
+        } else {
+            showToast("Training failed: " + data.message, "error");
+            btn.disabled = false;
+        }
+    } catch (err) {
+        spinner.style.display = 'none';
+        btn.disabled = false;
+        showToast("Error during training request.", "error");
+    }
+}
+
+// Clean up webcam stream on page navigation
+window.addEventListener('beforeunload', () => {
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+    }
+});
+</script>
+{% endblock %}

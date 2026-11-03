@@ -1,0 +1,3 @@
+StudentID,Name,ClassDepartment,YearSemester,Email,FaceRegistered,RegistrationDate
+STU101,Moin,Computer Science,Semester 6,moin@college.edu,Yes,2026-08-01 03:00:00
+STU102,Srinath,Computer Science,Semester 6,srinath@college.edu,No,2026-08-01 03:00:00

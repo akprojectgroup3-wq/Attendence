@@ -1,0 +1,8 @@
+{
+    "admin": {
+        "username": "admin",
+        "password_hash": "scrypt:32768:8:1$i2lcuaymbLmSdu61$d6a2cdc0d7ed26ce4e288a5ace4d6570e1d375f2b8b5ffc6485080bc0a76c8d4352f61d0cf1babe2903b44d84fcdb1f29ae8b04c2ea9fdf38be21cf14986dfa4",
+        "full_name": "System Administrator",
+        "role": "admin"
+    }
+}

@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Live Face Recognition Attendance{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Live AI Face Attendance</h1>
+        <p class="page-description">Automated student identification & time-stamped attendance recording using LBPH.</p>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <span class="badge" style="background:#e0f2fe; color:#0369a1; font-size:0.8rem;">Cutoff: {{ settings.cutoff_time }}</span>
+        <span class="badge" style="background:#f1f5f9; color:#475569; font-size:0.8rem;">Session: {{ settings.attendance_session }}</span>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+    <!-- Left Column: Live Camera Video Stream & Controls -->
+    <div>
+        <div class="card">
+            <div class="card-title">
+                <span>Active Camera Stream</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span id="cam-status-pill" class="badge" style="background:#f1f5f9; color:#64748b;">Camera Stopped</span>
+                    <button id="toggle-audio-btn" class="btn btn-secondary btn-sm" onclick="toggleAudio()" title="Toggle Recognition Beep Sound">
+                        <svg id="audio-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                        </svg>
+                        <span id="audio-label">Sound: On</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Video Display Container -->
+            <div class="camera-feed-container">
+                <!-- Browser client-side webcam video (for instant, high-frame-rate local preview) -->
+                <video id="live-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; display:none;"></video>
+                <!-- Canvas where OpenCV processed annotations are rendered -->
+                <canvas id="recognition-canvas" style="display:none; width:100%; height:100%; object-fit:cover;"></canvas>
+
+                <!-- Server MJPEG Stream option (for ESP32-CAM or native backend mode) -->
+                <img id="server-stream-img" class="camera-feed-image" style="display:none;" alt="Live Recognition Feed">
+
+                <!-- Placeholder when stopped -->
+                <div id="live-placeholder" class="camera-placeholder">
+                    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:12px; color:#475569;">
+                        <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11"/>
+                        <rect width="14" height="12" x="2" y="6" rx="2"/>
+                        <circle cx="9" cy="12" r="2"/>
+                    </svg>
+                    <div style="font-weight:600; font-size:1.05rem; color:#f8fafc; margin-bottom:4px;">Camera Inactive</div>
+                    <div style="font-size:0.84rem; color:#94a3b8; max-width:320px;">
+                        Click "Start Live Attendance" below to activate face detection and automatic check-in.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toolbar Controls -->
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button id="start-attendance-btn" class="btn btn-primary" onclick="startLiveAttendance()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    Start Live Attendance
+                </button>
+
+                <button id="stop-attendance-btn" class="btn btn-danger" onclick="stopLiveAttendance()" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect width="14" height="14" x="5" y="5" rx="2"/>
+                    </svg>
+                    Stop Camera
+                </button>
+
+                <a href="{{ url_for('settings_page') }}" class="btn btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    Settings (Switch to ESP32-CAM)
+                </a>
+            </div>
+        </div>
+
+        <!-- Academic / Security Disclaimer Card -->
+        <div class="card" style="background:#eff6ff; border-color:#bfdbfe;">
+            <div style="display:flex; gap:12px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" style="flex-shrink:0; margin-top:2px;">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <div style="font-size:0.83rem; color:#1e40af; line-height:1.45;">
+                    <strong>Academic Project Note & Anti-Spoofing Scope:</strong> This prototype utilizes OpenCV Haar Cascades and Local Binary Pattern Histograms (LBPH) for facial pattern matching. While effective for classroom demonstration, basic face recognition alone does not prove physical presence with absolute certainty. Advanced anti-spoofing (depth sensors, infrared 3D liveness, optical flow blink analysis) is documented for future hardware extensions.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Live Real-Time Recognition Stream -->
+    <div>
+        <div class="card">
+            <div class="card-title">
+                <span>Real-Time Scan Activity</span>
+                <span id="scan-count-badge" class="badge badge-registered">0 Scans</span>
+            </div>
+
+            <div id="live-activity-stream" class="activity-list" style="min-height: 380px;">
+                <div id="empty-activity-msg" class="empty-state" style="padding: 30px 10px;">
+                    <div class="empty-state-title" style="font-size:0.9rem;">Waiting for Scans</div>
+                    <div class="empty-state-desc">Faces detected in the live stream will appear here instantly.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Summary Mini-Card -->
+        <div class="card" style="padding:16px;">
+            <div style="font-size:0.82rem; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">Model Status:</div>
+            {% if model_ready %}
+            <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--success); font-weight:600;">
+                <span class="status-dot"></span> LBPH Model Loaded & Active
+            </div>
+            {% else %}
+            <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--danger); font-weight:600;">
+                <span class="status-dot"></span> Model Not Trained Yet!
+            </div>
+            <a href="{{ url_for('register_face_page') }}" style="font-size:0.8rem; color:var(--primary); margin-top:6px; display:inline-block;">Go to Face Registration &rarr;</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let liveStream = null;
+let isScanning = false;
+let soundEnabled = true;
+let totalScansSession = 0;
+let processInterval = null;
+
+const videoEl = document.getElementById('live-video');
+const canvasEl = document.getElementById('recognition-canvas');
+const placeholderEl = document.getElementById('live-placeholder');
+const statusPill = document.getElementById('cam-status-pill');
+const startBtn = document.getElementById('start-attendance-btn');
+const stopBtn = document.getElementById('stop-attendance-btn');
+const activityContainer = document.getElementById('live-activity-stream');
+
+// Beep audio synthesizer using Web Audio API
+function playRecognitionBeep(isSuccess = true) {
+    if (!soundEnabled) return;
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (isSuccess) {
+            osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.08); // A5
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.25);
+        } else {
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+        }
+    } catch (e) {
+        // AudioContext might require user gesture on some browsers
+    }
+}
+
+function toggleAudio() {
+    soundEnabled = !soundEnabled;
+    document.getElementById('audio-label').textContent = soundEnabled ? 'Sound: On' : 'Sound: Off';
+    document.getElementById('audio-icon').style.opacity = soundEnabled ? '1' : '0.4';
+}
+
+async function startLiveAttendance() {
+    {% if not model_ready %}
+    showToast("No trained LBPH model found! Please register students and train the model first.", "warning");
+    {% endif %}
+
+    try {
+        liveStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+            audio: false
+        });
+        videoEl.srcObject = liveStream;
+        videoEl.style.display = 'block';
+        placeholderEl.style.display = 'none';
+
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        isScanning = true;
+
+        statusPill.textContent = 'Live Scanning';
+        statusPill.style.background = '#dcfce7';
+        statusPill.style.color = '#15803d';
+
+        showToast("Live attendance session started.", "success");
+
+        // Send frames every 350ms to backend for OpenCV Haar Cascade & LBPH prediction
+        processInterval = setInterval(processCurrentFrame, 350);
+
+    } catch (err) {
+        console.error(err);
+        showToast("Could not access camera: " + err.message, "error");
+    }
+}
+
+function stopLiveAttendance() {
+    isScanning = false;
+    if (processInterval) {
+        clearInterval(processInterval);
+        processInterval = null;
+    }
+    if (liveStream) {
+        liveStream.getTracks().forEach(track => track.stop());
+        liveStream = null;
+    }
+    videoEl.style.display = 'none';
+    placeholderEl.style.display = 'flex';
+
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+
+    statusPill.textContent = 'Camera Stopped';
+    statusPill.style.background = '#f1f5f9';
+    statusPill.style.color = '#64748b';
+}
+
+let isFrameInFlight = false;
+
+async function processCurrentFrame() {
+    if (!isScanning || isFrameInFlight || !videoEl.videoWidth) return;
+    isFrameInFlight = true;
+
+    canvasEl.width = videoEl.videoWidth;
+    canvasEl.height = videoEl.videoHeight;
+    const ctx = canvasEl.getContext('2d');
+    ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+
+    const frameData = canvasEl.toDataURL('image/jpeg', 0.85);
+
+    try {
+        const res = await fetch("{{ url_for('api_process_live_frame') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ frame: frameData, auto_mark: true })
+        });
+        const data = await res.json();
+
+        if (data.success && data.events && data.events.length > 0) {
+            for (const evt of data.events) {
+                if (evt.status === 'recognized') {
+                    handleRecognizedEvent(evt);
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Frame recognition error:", err);
+    } finally {
+        isFrameInFlight = false;
+    }
+}
+
+const seenTodayInUi = new Set();
+
+function handleRecognizedEvent(evt) {
+    const emptyMsg = document.getElementById('empty-activity-msg');
+    if (emptyMsg) emptyMsg.remove();
+
+    // Check if new mark occurred or already marked
+    const isNewMark = evt.attendance_marked;
+    const itemKey = evt.student_id + "_" + (evt.attendance_status || "scanned");
+
+    if (isNewMark) {
+        playRecognitionBeep(true);
+        showToast(`Attendance Marked: ${evt.name} (${evt.student_id}) - ${evt.attendance_status}`, "success");
+        totalScansSession++;
+        document.getElementById('scan-count-badge').textContent = `${totalScansSession} Scans`;
+    }
+
+    // Only append to ticker if not recently appended
+    if (!seenTodayInUi.has(itemKey)) {
+        seenTodayInUi.add(itemKey);
+
+        const card = document.createElement('div');
+        card.className = 'activity-item';
+
+        const statusClass = evt.attendance_status === 'Late' ? 'badge-late' : 'badge-present';
+        const nowTime = new Date().toLocaleTimeString();
+
+        card.innerHTML = `
+            <div>
+                <div style="font-weight:700; font-size:0.92rem; color:var(--text-primary);">${evt.name}</div>
+                <div style="font-size:0.78rem; color:var(--text-muted); font-family:monospace;">
+                    ${evt.student_id} &bull; Match Confidence: ${evt.confidence}%
+                </div>
+                <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:2px;">
+                    ${evt.message || 'Face matched by LBPH.'}
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <span class="badge ${statusClass}">${evt.attendance_status || 'Present'}</span>
+                <div style="font-size:0.74rem; color:var(--text-muted); margin-top:4px;">${nowTime}</div>
+            </div>
+        `;
+
+        activityContainer.prepend(card);
+    }
+}
+
+window.addEventListener('beforeunload', () => {
+    if (liveStream) {
+        liveStream.getTracks().forEach(t => t.stop());
+    }
+});
+</script>
+{% endblock %}

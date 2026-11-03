@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Student Management{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Student Directory</h1>
+        <p class="page-description">Manage enrolled students, biometric face registration, and class details.</p>
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <button class="btn btn-primary" onclick="openAddModal()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add New Student
+        </button>
+    </div>
+</div>
+
+<!-- Search & Filter Controls -->
+<div class="card" style="padding: 16px 20px;">
+    <form method="GET" action="{{ url_for('students_page') }}" style="display: flex; gap: 14px; flex-wrap: wrap; align-items: center;">
+        <div style="flex: 1; min-width: 200px;">
+            <input 
+                type="text" 
+                name="search" 
+                class="form-input" 
+                placeholder="Search by student name or ID..." 
+                value="{{ search_query or '' }}"
+            >
+        </div>
+
+        <div style="width: 180px;">
+            <select name="dept" class="form-select">
+                <option value="">All Departments</option>
+                <option value="Computer Science" {% if selected_dept == 'Computer Science' %}selected{% endif %}>Computer Science</option>
+                <option value="Information Technology" {% if selected_dept == 'Information Technology' %}selected{% endif %}>Information Technology</option>
+                <option value="Electronics" {% if selected_dept == 'Electronics' %}selected{% endif %}>Electronics</option>
+                <option value="General" {% if selected_dept == 'General' %}selected{% endif %}>General</option>
+            </select>
+        </div>
+
+        <div style="width: 170px;">
+            <select name="status" class="form-select">
+                <option value="">All Face Statuses</option>
+                <option value="Yes" {% if selected_status == 'Yes' %}selected{% endif %}>Registered (Yes)</option>
+                <option value="No" {% if selected_status == 'No' %}selected{% endif %}>Pending (No)</option>
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-secondary">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            Filter
+        </button>
+
+        {% if search_query or selected_dept or selected_status %}
+        <a href="{{ url_for('students_page') }}" class="btn btn-secondary">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Student Records Table -->
+<div class="card">
+    <div class="card-title">
+        <span>Enrolled Students ({{ students|length }})</span>
+    </div>
+
+    {% if students %}
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Student ID</th>
+                    <th>Full Name</th>
+                    <th>Department</th>
+                    <th>Semester</th>
+                    <th>Email</th>
+                    <th>Biometric Face</th>
+                    <th>Registered On</th>
+                    <th style="text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in students %}
+                <tr>
+                    <td style="font-weight: 700; font-family: monospace; color: var(--primary);">
+                        {{ s.StudentID }}
+                    </td>
+                    <td style="font-weight: 600;">
+                        {{ s.Name }}
+                    </td>
+                    <td>{{ s.ClassDepartment }}</td>
+                    <td>{{ s.YearSemester }}</td>
+                    <td style="color: var(--text-secondary); font-size: 0.82rem;">
+                        {{ s.Email or '—' }}
+                    </td>
+                    <td>
+                        {% if s.FaceRegistered == 'Yes' %}
+                            <span class="badge badge-registered">Registered</span>
+                        {% else %}
+                            <span class="badge badge-unregistered">Not Registered</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size: 0.82rem; color: var(--text-muted);">
+                        {{ s.RegistrationDate }}
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                        <a href="{{ url_for('register_face_page') }}?student_id={{ s.StudentID }}" class="btn btn-secondary btn-sm" title="Register Face Photos">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+                                <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                                <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+                                <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                            </svg>
+                            Capture Face
+                        </a>
+                        <button class="btn btn-secondary btn-sm" onclick='openEditModal({{ s | tojson }})' title="Edit Student">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="confirmDeleteStudent('{{ s.StudentID }}', '{{ s.Name }}')" title="Delete Student">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+        </svg>
+        <div class="empty-state-title">No Students Found</div>
+        <div class="empty-state-desc">Click "Add New Student" above to enroll students into the system.</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal: Add Student -->
+<div id="addModal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h2 class="modal-title">Enroll New Student</h2>
+            <button class="modal-close" onclick="closeModal('addModal')">&times;</button>
+        </div>
+        <form id="add-student-form" onsubmit="submitAddStudent(event)">
+            <div class="form-group">
+                <label class="form-label" for="add_student_id">Student ID / Roll Number *</label>
+                <input type="text" id="add_student_id" class="form-input" placeholder="e.g. STU101" required>
+                <small style="color: var(--text-muted); font-size: 0.76rem;">Must be unique across the campus.</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="add_name">Full Name *</label>
+                <input type="text" id="add_name" class="form-input" placeholder="e.g. John Doe" required>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                <div class="form-group">
+                    <label class="form-label" for="add_dept">Class / Department *</label>
+                    <input type="text" id="add_dept" class="form-input" placeholder="Computer Science" value="Computer Science" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="add_sem">Year / Semester *</label>
+                    <input type="text" id="add_sem" class="form-input" placeholder="Semester 6" value="Semester 6" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="add_email">Email Address</label>
+                <input type="email" id="add_email" class="form-input" placeholder="student@college.edu">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('addModal')">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="add-submit-btn">Save Student</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Edit Student -->
+<div id="editModal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h2 class="modal-title">Edit Student Details</h2>
+            <button class="modal-close" onclick="closeModal('editModal')">&times;</button>
+        </div>
+        <form id="edit-student-form" onsubmit="submitEditStudent(event)">
+            <div class="form-group">
+                <label class="form-label">Student ID</label>
+                <input type="text" id="edit_student_id" class="form-input" disabled style="background:#f1f5f9; cursor:not-allowed;">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="edit_name">Full Name *</label>
+                <input type="text" id="edit_name" class="form-input" required>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                <div class="form-group">
+                    <label class="form-label" for="edit_dept">Class / Department *</label>
+                    <input type="text" id="edit_dept" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit_sem">Year / Semester *</label>
+                    <input type="text" id="edit_sem" class="form-input" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="edit_email">Email Address</label>
+                <input type="email" id="edit_email" class="form-input">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update Details</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openAddModal() {
+    document.getElementById('add-student-form').reset();
+    document.getElementById('addModal').classList.add('active');
+}
+
+function openEditModal(student) {
+    document.getElementById('edit_student_id').value = student.StudentID;
+    document.getElementById('edit_name').value = student.Name;
+    document.getElementById('edit_dept').value = student.ClassDepartment;
+    document.getElementById('edit_sem').value = student.YearSemester;
+    document.getElementById('edit_email').value = student.Email || '';
+    document.getElementById('editModal').classList.add('active');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+async function submitAddStudent(e) {
+    e.preventDefault();
+    const studentId = document.getElementById('add_student_id').value.trim();
+    const name = document.getElementById('add_name').value.trim();
+    const dept = document.getElementById('add_dept').value.trim();
+    const sem = document.getElementById('add_sem').value.trim();
+    const email = document.getElementById('add_email').value.trim();
+
+    try {
+        const res = await fetch("{{ url_for('api_add_student') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ student_id: studentId, name, class_dept: dept, year_sem: sem, email })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, "success");
+            closeModal('addModal');
+            setTimeout(() => window.location.reload(), 700);
+        } else {
+            showToast(data.message, "error");
+        }
+    } catch (err) {
+        showToast("Error adding student. Please try again.", "error");
+    }
+}
+
+async function submitEditStudent(e) {
+    e.preventDefault();
+    const studentId = document.getElementById('edit_student_id').value;
+    const name = document.getElementById('edit_name').value.trim();
+    const dept = document.getElementById('edit_dept').value.trim();
+    const sem = document.getElementById('edit_sem').value.trim();
+    const email = document.getElementById('edit_email').value.trim();
+
+    try {
+        const res = await fetch("{{ url_for('api_update_student') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ student_id: studentId, name, class_dept: dept, year_sem: sem, email })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, "success");
+            closeModal('editModal');
+            setTimeout(() => window.location.reload(), 700);
+        } else {
+            showToast(data.message, "error");
+        }
+    } catch (err) {
+        showToast("Error updating student.", "error");
+    }
+}
+
+async function confirmDeleteStudent(studentId, name) {
+    if (!confirm(`Are you sure you want to delete student "${name}" (${studentId})?\n\nWarning: This will also remove any registered face dataset images!`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch("{{ url_for('api_delete_student') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ student_id: studentId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message, "success");
+            setTimeout(() => window.location.reload(), 700);
+        } else {
+            showToast(data.message, "error");
+        }
+    } catch (err) {
+        showToast("Error deleting student.", "error");
+    }
+}
+</script>
+{% endblock %}
