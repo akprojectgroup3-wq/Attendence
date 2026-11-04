@@ -69,7 +69,9 @@ def init_storage():
             default_admin = {
                 "admin": {
                     "username": "admin",
-                    "password_hash": generate_password_hash("admin123"),
+                    "password_hash": generate_password_hash(
+                        os.environ.get("ADMIN_PASSWORD", "admin123")
+                    ),
                     "full_name": "System Administrator",
                     "role": "admin"
                 }

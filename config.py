@@ -11,9 +11,9 @@ import zoneinfo
 
 # Base paths
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
 DATASET_DIR = DATA_DIR / "face_dataset"
-MODELS_DIR = BASE_DIR / "models"
+MODELS_DIR = Path(os.environ.get("MODELS_DIR", BASE_DIR / "models"))
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
