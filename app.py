@@ -28,6 +28,7 @@ from services.pdf_report_service import generate_pdf
 from services.excel_report_service import generate_excel
 from services.storage_service import (
     init_storage,
+    sync_admin_password_from_env,
     verify_user,
     update_admin_password
 )
@@ -59,6 +60,7 @@ app.config.from_object(Config)
 
 # Initialize CSV storage files and default admin credentials on startup
 init_storage()
+sync_admin_password_from_env()
 
 
 # ==========================================

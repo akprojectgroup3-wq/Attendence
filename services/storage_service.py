@@ -84,6 +84,34 @@ def init_storage():
 # USER AUTHENTICATION STORAGE
 # ==========================================
 
+def sync_admin_password_from_env() -> bool:
+    """Apply the configured deployment password to an existing admin account."""
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if not admin_password:
+        return False
+
+    with _file_lock:
+        try:
+            with open(USERS_JSON, "r", encoding="utf-8") as f:
+                users = json.load(f)
+
+            admin = users.get("admin")
+            if not admin:
+                return False
+            if check_password_hash(admin.get("password_hash", ""), admin_password):
+                return True
+
+            admin["password_hash"] = generate_password_hash(admin_password)
+            temp_file = USERS_JSON.with_suffix(".tmp")
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(users, f, indent=4)
+            os.replace(temp_file, USERS_JSON)
+            return True
+        except Exception as e:
+            print(f"Error syncing admin password: {e}")
+            return False
+
+
 def get_user(username: str) -> Optional[dict]:
     """Retrieve user dictionary by username."""
     with _file_lock:
